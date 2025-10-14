@@ -221,7 +221,14 @@ app.get('/rooms/:id/invoice/:yyyymm', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, async () => {
-  await migrate();
-  console.log('Running on port ' + PORT);
-});
+
+// Chạy migrate trước khi mở cổng
+(async () => {
+  try {
+    await migrate();
+    app.listen(PORT, () => console.log('Running on port ' + PORT));
+  } catch (e) {
+    console.error('Migrate failed:', e);
+    process.exit(1);
+  }
+})();
