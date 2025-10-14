@@ -1,0 +1,35 @@
+<%- include('partials/top', { title: `Sửa phòng ${room.name}` }) %>
+<a href="/rooms/<%= room.id %>" class="text-sm text-blue-600">&larr; Quay lại phòng</a>
+<h1 class="text-xl font-semibold mt-2 mb-4">Sửa phòng <%= room.name %></h1>
+
+<form method="POST" action="/rooms/<%= room.id %>?_method=PUT" class="bg-white border rounded-xl p-4 grid md:grid-cols-3 gap-4">
+  <label class="text-sm">Tên phòng
+    <input name="name" value="<%= room.name %>" required class="input" />
+  </label>
+  <label class="text-sm md:col-span-2">Ghi chú
+    <input name="note" value="<%= room.note || '' %>" class="input" />
+  </label>
+
+  <div class="md:col-span-3 font-medium mt-2 mb-1">Đơn giá & phí</div>
+  <label class="text-sm">Tiền phòng
+    <input type="number" name="rent" class="input" required value="<%= tariff.rent %>" />
+  </label>
+  <label class="text-sm">Mạng
+    <input type="number" name="internet_fee" class="input" required value="<%= tariff.internet_fee %>" />
+  </label>
+  <label class="text-sm">Vệ sinh
+    <input type="number" name="cleaning_fee" class="input" required value="<%= tariff.cleaning_fee %>" />
+  </label>
+  <label class="text-sm">Đơn giá điện
+    <input type="number" name="electricity_price" class="input" required value="<%= tariff.electricity_price %>" />
+  </label>
+  <label class="text-sm">Đơn giá nước
+    <input type="number" name="water_price" class="input" required value="<%= tariff.water_price %>" />
+  </label>
+
+  <div class="md:col-span-3">
+    <button class="px-4 py-2 rounded-lg bg-slate-900 text-white">Lưu</button>
+    <a href="/rooms/<%= room.id %>" class="ml-2 px-4 py-2 rounded-lg border">Huỷ</a>
+  </div>
+</form>
+<%- include('partials/bottom') %>

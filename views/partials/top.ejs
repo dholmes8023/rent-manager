@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title><%= title || "Quản lý phòng trọ" %></title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/public/style.css">
+</head>
+<body class="bg-slate-50 text-slate-800">
+  <nav class="bg-white border-b sticky top-0 z-10">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+      <a href="/" class="font-semibold">🏠 Quản lý phòng trọ</a>
+      <div class="flex items-center gap-3 text-sm">
+        <a href="/rooms/new" class="px-3 py-1 rounded-lg border hover:bg-slate-50">+ Thêm phòng</a>
+        <a href="/settings" class="px-3 py-1 rounded-lg border hover:bg-slate-50">⚙️ Thông tin chủ trọ</a>
+      </div>
+    </div>
+  </nav>
+  <main class="max-w-6xl mx-auto px-4 py-6">

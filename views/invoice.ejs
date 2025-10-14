@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Hóa đơn <%= yyyymm %> - <%= room.name %></title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>@media print {.no-print{display:none}} .cell{padding:6px 10px;border-bottom:1px solid #e5e7eb}</style>
+</head>
+<body class="bg-white text-slate-900">
+  <div class="max-w-2xl mx-auto p-6">
+    <div class="flex items-center justify-between mb-2">
+      <h1 class="text-xl font-semibold">HÓA ĐƠN PHÒNG <%= room.name %> — <%= yyyymm %></h1>
+      <button class="no-print px-3 py-2 bg-slate-900 text-white rounded-lg" onclick="print()">In hoá đơn</button>
+    </div>
+    <div class="text-sm text-slate-600 mb-4">Ngày tạo: <%= createdAt %></div>
+
+    <div class="border rounded-xl overflow-hidden">
+      <div class="grid grid-cols-2">
+        <div class="cell">Tiền phòng</div><div class="cell text-right"><%= fmt(rent) %></div>
+        <div class="cell">Mạng</div><div class="cell text-right"><%= fmt(internet_fee) %></div>
+        <div class="cell">Vệ sinh</div><div class="cell text-right"><%= fmt(cleaning_fee) %></div>
+        <div class="cell">Điện (<%= elec_usage %> kWh x <%= fmtRaw(tariff.electricity_price) %>)</div><div class="cell text-right"><%= fmt(subtotal_electricity) %></div>
+        <div class="cell">Nước (<%= water_usage %> m³ x <%= fmtRaw(tariff.water_price) %>)</div><div class="cell text-right"><%= fmt(subtotal_water) %></div>
+        <div class="cell font-medium">TỔNG</div><div class="cell text-right font-semibold"><%= fmt(total) %></div>
+      </div>
+    </div>
+
+    <div class="mt-4 text-sm">
+      Người thuê: <b><%= tenant?.full_name || "—" %></b> <%= tenant?.phone ? '('+tenant.phone+')' : '' %>
+    </div>
+  </div>
+</body>
+</html>

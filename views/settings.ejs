@@ -1,0 +1,23 @@
+<%- include('partials/top', { title: 'Thông tin chủ trọ' }) %>
+<h1 class="text-xl font-semibold mb-4">Thông tin chủ trọ</h1>
+<form method="POST" action="/settings" class="bg-white border rounded-xl p-4 grid md:grid-cols-2 gap-4">
+  <label class="text-sm">Tên chủ trọ
+    <input name="owner_name" value="<%= settings?.owner_name || '' %>" class="input" />
+  </label>
+  <label class="text-sm">SĐT
+    <input name="phone" value="<%= settings?.phone || '' %>" class="input" />
+  </label>
+  <label class="text-sm md:col-span-2">Địa chỉ
+    <input name="address" value="<%= settings?.address || '' %>" class="input" />
+  </label>
+  <label class="text-sm">Ngân hàng
+    <input name="bank_name" value="<%= settings?.bank_name || '' %>" class="input" />
+  </label>
+  <label class="text-sm">Số tài khoản
+    <input name="bank_account" value="<%= settings?.bank_account || '' %>" class="input" />
+  </label>
+  <div class="md:col-span-2">
+    <button class="px-4 py-2 rounded-lg bg-slate-900 text-white">Lưu</button>
+  </div>
+</form>
+<%- include('partials/bottom') %>

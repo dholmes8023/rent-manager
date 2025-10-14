@@ -1,0 +1,16 @@
+{
+  "name": "rent-manager-pg",
+  "version": "2.3.0",
+  "description": "Rent Manager (Postgres) v4.3 — seeded P201..P404 + unit prices 4500/35000",
+  "main": "app.js",
+  "type": "module",
+  "scripts": { "start": "node app.js" },
+  "dependencies": {
+    "dayjs": "^1.11.10",
+    "dotenv": "^16.4.5",
+    "ejs": "^3.1.9",
+    "express": "^4.19.2",
+    "method-override": "^3.0.0",
+    "pg": "^8.11.5"
+  }
+}
