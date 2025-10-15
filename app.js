@@ -38,6 +38,34 @@ function prevMonthStr(yyyymm) {
   return date.format('YYYYMM');
 }
 
+async function recalcInvoice(roomId, yyyymm) {
+  const tariff = (await q(`SELECT * FROM tariffs WHERE room_id=$1`, [roomId])).rows[0];
+  const meter  = (await q(`SELECT * FROM meter_readings WHERE room_id=$1 AND yyyymm=$2`, [roomId, yyyymm])).rows[0];
+  if (!tariff || !meter) return null; // chưa đủ dữ liệu
+
+  const elec_usage = Number((meter.elec_end - meter.elec_start).toFixed(2));
+  const water_usage = Number((meter.water_end - meter.water_start).toFixed(2));
+  const subtotal_electricity = Math.round(elec_usage * tariff.electricity_price);
+  const subtotal_water       = Math.round(water_usage * tariff.water_price);
+  const total = tariff.rent + tariff.internet_fee + tariff.cleaning_fee + subtotal_electricity + subtotal_water;
+
+  const { rows } = await q(`
+    INSERT INTO invoices (room_id, yyyymm, subtotal_electricity, subtotal_water, rent, internet_fee, cleaning_fee, total)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+    ON CONFLICT (room_id, yyyymm) DO UPDATE SET
+      subtotal_electricity = EXCLUDED.subtotal_electricity,
+      subtotal_water       = EXCLUDED.subtotal_water,
+      rent                 = EXCLUDED.rent,
+      internet_fee         = EXCLUDED.internet_fee,
+      cleaning_fee         = EXCLUDED.cleaning_fee,
+      total                = EXCLUDED.total,
+      created_at           = NOW()
+    RETURNING *;
+  `, [roomId, yyyymm, subtotal_electricity, subtotal_water, tariff.rent, tariff.internet_fee, tariff.cleaning_fee, total]);
+
+  return { invoice: rows[0], elec_usage, water_usage, tariff };
+}
+
 // routes
 app.get('/', async (req, res) => {
   const { rows } = await q(`
