@@ -129,6 +129,11 @@ app.put('/rooms/:id', async (req, res) => {
   await q(`UPDATE rooms SET name=$1, note=$2 WHERE id=$3`, [name, note || null, id]);
   await q(`UPDATE tariffs SET rent=$1, internet_fee=$2, cleaning_fee=$3, electricity_price=$4, water_price=$5 WHERE room_id=$6`,
           [Number(rent), Number(internet_fee), Number(cleaning_fee), Number(electricity_price), Number(water_price), id]);
+  // Tự tính lại hóa đơn nếu đang xem tháng cụ thể
+  const yyyymm = req.query.yyyymm;
+  if (yyyymm) {
+    await recalcInvoice(id, yyyymm);
+  }
   res.redirect(`/rooms/${id}`);
 });
 
@@ -205,7 +210,8 @@ app.post('/rooms/:id/meter', async (req, res) => {
       water_start= EXCLUDED.water_start,
       water_end  = EXCLUDED.water_end
   `, [id, yyyymm, Number(elec_start), Number(elec_end), Number(water_start), Number(water_end)]);
-
+  
+  await recalcInvoice(id, yyyymm);
   res.redirect(`/rooms/${id}?yyyymm=${yyyymm}`);
 });
 
@@ -213,27 +219,15 @@ app.post('/rooms/:id/meter', async (req, res) => {
 app.get('/rooms/:id/invoice/:yyyymm', async (req, res) => {
   const id = Number(req.params.id);
   const { yyyymm } = req.params;
-  const room = (await q(`SELECT * FROM rooms WHERE id=$1`, [id])).rows[0];
-  const tenant = await activeTenant(id);
-  const tariff = await roomTariff(id);
-  const meter = (await q(`SELECT * FROM meter_readings WHERE room_id=$1 AND yyyymm=$2`, [id, yyyymm])).rows[0];
 
-  if (!room || !tariff) return res.status(404).send('Thiếu dữ liệu phòng/đơn giá');
-  if (!meter) return res.status(400).send('Chưa có chỉ số tháng này');
+  const room   = (await q(`SELECT * FROM rooms WHERE id=$1`, [id])).rows[0];
+  const tenant = (await activeTenant(id));
+  if (!room) return res.status(404).send('Không tìm thấy phòng');
 
-  const elec_usage = Number((meter.elec_end - meter.elec_start).toFixed(2));
-  const water_usage = Number((meter.water_end - meter.water_start).toFixed(2));
-  const subtotal_electricity = Math.round(elec_usage * tariff.electricity_price);
-  const subtotal_water = Math.round(water_usage * tariff.water_price);
-
-  let invoice = (await q(`SELECT * FROM invoices WHERE room_id=$1 AND yyyymm=$2`, [id, yyyymm])).rows[0];
-  if (!invoice) {
-    const total = tariff.rent + tariff.internet_fee + tariff.cleaning_fee + subtotal_electricity + subtotal_water;
-    await q(`INSERT INTO invoices (room_id, yyyymm, subtotal_electricity, subtotal_water, rent, internet_fee, cleaning_fee, total)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-             [id, yyyymm, subtotal_electricity, subtotal_water, tariff.rent, tariff.internet_fee, tariff.cleaning_fee, total]);
-    invoice = (await q(`SELECT * FROM invoices WHERE room_id=$1 AND yyyymm=$2`, [id, yyyymm])).rows[0];
-  }
+  // Tự tính (và upsert) hóa đơn mỗi lần mở
+  const recalc = await recalcInvoice(id, yyyymm);
+  if (!recalc) return res.status(400).send('Thiếu chỉ số/thông tin đơn giá tháng này');
+  const { invoice, elec_usage, water_usage, tariff } = recalc;
 
   res.render('invoice', {
     room, tenant, yyyymm,
