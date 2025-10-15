@@ -13,6 +13,13 @@
       <h1 class="text-xl font-semibold">HÓA ĐƠN PHÒNG <%= room.name %> — <%= yyyymm %></h1>
       <button class="no-print px-3 py-2 bg-slate-900 text-white rounded-lg" onclick="print()">In hoá đơn</button>
     </div>
+    <%
+      const createdAtVN = new Date().toLocaleString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      dateStyle: 'full',
+      timeStyle: 'medium'
+      });
+    %>
     <div class="text-sm text-slate-600 mb-4">Ngày tạo: <%= createdAt %></div>
 
     <div class="border rounded-xl overflow-hidden">
