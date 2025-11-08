@@ -216,6 +216,7 @@ app.post('/rooms/:id/meter', async (req, res) => {
 });
 
 // invoice
+// invoice
 app.get('/rooms/:id/invoice/:yyyymm', async (req, res) => {
   const id = Number(req.params.id);
   const { yyyymm } = req.params;
@@ -224,6 +225,12 @@ app.get('/rooms/:id/invoice/:yyyymm', async (req, res) => {
   const tenant = (await activeTenant(id));
   if (!room) return res.status(404).send('Không tìm thấy phòng');
 
+  // Lấy chỉ số công tơ của tháng này
+  const meter = (await q(
+    `SELECT * FROM meter_readings WHERE room_id=$1 AND yyyymm=$2`,
+    [id, yyyymm]
+  )).rows[0];
+
   // Tự tính (và upsert) hóa đơn mỗi lần mở
   const recalc = await recalcInvoice(id, yyyymm);
   if (!recalc) return res.status(400).send('Thiếu chỉ số/thông tin đơn giá tháng này');
@@ -231,6 +238,7 @@ app.get('/rooms/:id/invoice/:yyyymm', async (req, res) => {
 
   res.render('invoice', {
     room, tenant, yyyymm,
+    meter, // ✅ thêm vào để EJS hiển thị chỉ số đầu/cuối
     elec_usage, water_usage,
     subtotal_electricity: invoice.subtotal_electricity,
     subtotal_water: invoice.subtotal_water,
