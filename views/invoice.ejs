@@ -28,13 +28,13 @@
         <div class="cell">Mạng</div><div class="cell text-right"><%= fmt(internet_fee) %></div>
         <div class="cell">Vệ sinh</div><div class="cell text-right"><%= fmt(cleaning_fee) %></div>
         <div class="cell">
-        Điện (<%= Number(meter.elec_end) %> − <%= Number(meter.elec_start) %>
-        = <%= elec_usage %> kWh × <%= fmtRaw(tariff.electricity_price) %>)
+        Điện (<%= Number(meter.elec_end) %> − <%= Number(meter.elec_start) %>)
+        <%= elec_usage %> kWh × <%= fmtRaw(tariff.electricity_price) %>
         </div>
         <div class="cell text-right"><%= fmt(subtotal_electricity) %></div>
         <div class="cell">
-        Nước (<%= Number(meter.water_end) %> − <%= Number(meter.water_start) %>
-        = <%= water_usage %> m³ × <%= fmtRaw(tariff.water_price) %>)
+        Nước (<%= Number(meter.water_end) %> − <%= Number(meter.water_start) %>)
+        <%= water_usage %> m³ × <%= fmtRaw(tariff.water_price) %>
         </div>
         <div class="cell text-right"><%= fmt(subtotal_water) %></div>
         <div class="cell font-medium">TỔNG</div><div class="cell text-right font-semibold"><%= fmt(total) %></div>
