@@ -1,16 +1,37 @@
 {
   "name": "rent-manager-pg",
-  "version": "2.3.0",
-  "description": "Rent Manager (Postgres) v4.3 — seeded P201..P404 + unit prices 4500/35000",
+  "version": "2.4.0",
+  "description": "Rent Manager — Quản lý phòng trọ trên Express + PostgreSQL (EJS, Tailwind).",
   "main": "app.js",
   "type": "module",
-  "scripts": { "start": "node app.js" },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "node app.js",
+    "dev": "node --watch app.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
   "dependencies": {
+    "compression": "^1.7.4",
     "dayjs": "^1.11.10",
     "dotenv": "^16.4.5",
     "ejs": "^3.1.9",
     "express": "^4.19.2",
+    "helmet": "^7.1.0",
     "method-override": "^3.0.0",
+    "morgan": "^1.10.0",
     "pg": "^8.11.5"
-  }
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "eslint": "^9.13.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.11.0",
+    "prettier": "^3.3.3"
+  },
+  "license": "MIT"
 }
