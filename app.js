@@ -309,6 +309,76 @@ app.get('/export/:yyyymm', async (req, res) => {
   });
 });
 
+// bulk meter routes
+app.get('/meters', async (req, res) => {
+  const yyyymm = (req.query.yyyymm && /^[0-9]{6}$/.test(req.query.yyyymm)) ? req.query.yyyymm : dayjs().format('YYYYMM');
+  const prevYm = prevMonthStr(yyyymm);
+
+  const [roomsRes, meterRes, prevMeterRes, tenantsRes] = await Promise.all([
+    q(`SELECT * FROM rooms ORDER BY id`),
+    q(`SELECT * FROM meter_readings WHERE yyyymm=$1`, [yyyymm]),
+    q(`SELECT * FROM meter_readings WHERE yyyymm=$1`, [prevYm]),
+    q(`SELECT room_id FROM tenants WHERE ended_at IS NULL`)
+  ]);
+
+  const metersByRoom = {};
+  meterRes.rows.forEach(m => metersByRoom[m.room_id] = m);
+  const prevMetersByRoom = {};
+  prevMeterRes.rows.forEach(m => prevMetersByRoom[m.room_id] = m);
+  
+  const occupiedRooms = new Set(tenantsRes.rows.map(t => t.room_id));
+
+  res.render('bulk_meter', { 
+    yyyymm, 
+    rooms: roomsRes.rows, 
+    metersByRoom, 
+    prevMetersByRoom,
+    occupiedRooms
+  });
+});
+
+app.post('/meters', async (req, res) => {
+  const { yyyymm } = req.body;
+  const updates = [];
+  
+  for (const key of Object.keys(req.body)) {
+    if (key.startsWith('elec_end_')) {
+      const roomId = Number(key.replace('elec_end_', ''));
+      const elec_end = req.body[`elec_end_${roomId}`];
+      const water_end = req.body[`water_end_${roomId}`];
+      const elec_start = req.body[`elec_start_${roomId}`];
+      const water_start = req.body[`water_start_${roomId}`];
+      
+      if (elec_start !== '' && elec_end !== '' && water_start !== '' && water_end !== '') {
+        updates.push({
+          roomId,
+          elec_start: Number(elec_start),
+          elec_end: Number(elec_end),
+          water_start: Number(water_start),
+          water_end: Number(water_end)
+        });
+      }
+    }
+  }
+
+  await Promise.all(updates.map(async u => {
+    if (u.elec_end >= u.elec_start && u.water_end >= u.water_start) {
+      await q(`
+        INSERT INTO meter_readings (room_id, yyyymm, elec_start, elec_end, water_start, water_end)
+        VALUES ($1,$2,$3,$4,$5,$6)
+        ON CONFLICT (room_id, yyyymm) DO UPDATE SET
+          elec_start = EXCLUDED.elec_start,
+          elec_end   = EXCLUDED.elec_end,
+          water_start= EXCLUDED.water_start,
+          water_end  = EXCLUDED.water_end
+      `, [u.roomId, yyyymm, u.elec_start, u.elec_end, u.water_start, u.water_end]);
+      await recalcInvoice(u.roomId, yyyymm);
+    }
+  }));
+  
+  res.redirect(`/meters?yyyymm=${yyyymm}`);
+});
+
 const PORT = process.env.PORT || 3000;
 
 // Chạy migrate trước khi mở cổng

@@ -1,0 +1,93 @@
+<%- include('partials/top', { title: 'Nhập điện nước hàng loạt' }) %>
+
+<div class="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+  <div>
+    <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Nhập điện nước hàng loạt</h1>
+    <p class="text-slate-500 mt-1">Ghi chỉ số cho tất cả các phòng trong cùng một tháng.</p>
+  </div>
+  <div class="flex items-center gap-2 bg-white px-3 py-2 rounded-xl shadow-sm border border-slate-200">
+    <label class="text-sm font-medium text-slate-600">Tháng:</label>
+    <input type="month" id="month_ui" class="border-none bg-transparent font-medium outline-none text-slate-800" />
+  </div>
+</div>
+
+<form method="POST" action="/meters" class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+  <input type="hidden" name="yyyymm" id="yyyymm" value="<%= yyyymm %>" />
+  
+  <div class="overflow-x-auto">
+    <table class="w-full text-left border-collapse">
+      <thead>
+        <tr class="bg-slate-50 border-b border-slate-200">
+          <th class="py-3 px-4 text-sm font-semibold text-slate-700">Phòng</th>
+          <th class="py-3 px-4 text-sm font-semibold text-slate-700 text-center" colspan="2">Điện (Số cũ ➔ Số mới)</th>
+          <th class="py-3 px-4 text-sm font-semibold text-slate-700 text-center" colspan="2">Nước (Số cũ ➔ Số mới)</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        <% rooms.forEach(room => { 
+            const meter = metersByRoom[room.id];
+            const prev = prevMetersByRoom[room.id];
+            
+            // Only require inputs if room is occupied or has previous data
+            const isOccupied = occupiedRooms.has(room.id);
+            const isRowActive = isOccupied || meter || prev;
+            
+            const elec_start_val = meter?.elec_start ?? prev?.elec_end ?? '';
+            const water_start_val = meter?.water_start ?? prev?.water_end ?? '';
+        %>
+        <tr class="<%= isRowActive ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/50 opacity-70' %> transition-colors">
+          <td class="py-3 px-4 font-bold text-slate-800">
+            <%= room.name %>
+            <% if (!isOccupied) { %>
+              <div class="text-[10px] font-normal text-slate-400">Trống</div>
+            <% } %>
+          </td>
+          <td class="py-2 px-2">
+            <input type="number" step="0.1" name="elec_start_<%= room.id %>" value="<%= elec_start_val %>" class="w-20 px-2 py-1.5 border border-slate-200 rounded-lg text-sm text-center outline-none focus:border-indigo-500" placeholder="Cũ" />
+          </td>
+          <td class="py-2 px-2">
+            <input type="number" step="0.1" name="elec_end_<%= room.id %>" value="<%= meter?.elec_end ?? '' %>" class="w-20 px-2 py-1.5 border border-indigo-200 bg-indigo-50/30 rounded-lg text-sm text-center outline-none focus:border-indigo-500 font-semibold" placeholder="Mới" />
+          </td>
+          <td class="py-2 px-2 border-l border-slate-100">
+            <input type="number" step="0.1" name="water_start_<%= room.id %>" value="<%= water_start_val %>" class="w-20 px-2 py-1.5 border border-slate-200 rounded-lg text-sm text-center outline-none focus:border-indigo-500" placeholder="Cũ" />
+          </td>
+          <td class="py-2 px-2">
+            <input type="number" step="0.1" name="water_end_<%= room.id %>" value="<%= meter?.water_end ?? '' %>" class="w-20 px-2 py-1.5 border border-blue-200 bg-blue-50/30 rounded-lg text-sm text-center outline-none focus:border-blue-500 font-semibold" placeholder="Mới" />
+          </td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+  
+  <div class="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+    <div class="text-sm text-slate-500">
+      * Các ô bỏ trống sẽ không được lưu. <br>
+      * Lưu ý: "Số mới" phải lớn hơn hoặc bằng "Số cũ".
+    </div>
+    <button class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-sm shadow-indigo-200 transition-colors">
+      Lưu tất cả chỉ số
+    </button>
+  </div>
+</form>
+
+<script>
+(function(){
+  var yyyymm = "<%= yyyymm %>";
+  var y = yyyymm.slice(0,4), m = yyyymm.slice(4,6);
+  var el = document.getElementById('month_ui');
+  if (el) {
+    el.value = y + '-' + m;
+    el.addEventListener('change', function(){
+      var v = this.value; // YYYY-MM
+      if (v) {
+        var parts = v.split('-');
+        var target = parts[0] + parts[1];
+        window.location = '/meters?yyyymm=' + target;
+      }
+    });
+  }
+})();
+</script>
+
+<%- include('partials/bottom') %>
