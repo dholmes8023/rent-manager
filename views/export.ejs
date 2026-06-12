@@ -76,8 +76,8 @@
                 <span class="text-slate-600 font-medium">Tiền điện</span>
                 <span class="font-medium"><%= fmt(inv.subtotal_electricity) %></span>
               </div>
-              <div class="text-xs text-slate-500 text-right">
-                <%= Number((inv.elec_end - inv.elec_start).toFixed(2)) %> kWh × <%= fmtRaw(inv.electricity_price) %>
+              <div class="text-xs text-slate-500 text-right font-medium">
+                (<%= Number(inv.elec_end) %> - <%= Number(inv.elec_start) %>) = <%= Number((inv.elec_end - inv.elec_start).toFixed(2)) %> kWh × <%= fmtRaw(inv.electricity_price) %>
               </div>
             </div>
 
@@ -86,8 +86,8 @@
                 <span class="text-slate-600 font-medium">Tiền nước</span>
                 <span class="font-medium"><%= fmt(inv.subtotal_water) %></span>
               </div>
-              <div class="text-xs text-slate-500 text-right">
-                <%= Number((inv.water_end - inv.water_start).toFixed(2)) %> m³ × <%= fmtRaw(inv.water_price) %>
+              <div class="text-xs text-slate-500 text-right font-medium">
+                (<%= Number(inv.water_end) %> - <%= Number(inv.water_start) %>) = <%= Number((inv.water_end - inv.water_start).toFixed(2)) %> m³ × <%= fmtRaw(inv.water_price) %>
               </div>
             </div>
           </div>

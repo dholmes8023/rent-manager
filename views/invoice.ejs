@@ -56,11 +56,8 @@
             <span class="text-slate-600 font-medium">Tiền điện</span>
             <span class="font-medium"><%= fmt(subtotal_electricity) %></span>
           </div>
-          <div class="text-xs text-slate-500 text-right">
-            <%= elec_usage %> kWh × <%= fmtRaw(tariff.electricity_price) %>
-          </div>
-          <div class="text-xs text-slate-400 text-right">
-            (Số cũ: <%= Number(meter.elec_start) %>, Số mới: <%= Number(meter.elec_end) %>)
+          <div class="text-xs text-slate-500 text-right font-medium">
+            (<%= Number(meter.elec_end) %> - <%= Number(meter.elec_start) %>) = <%= elec_usage %> kWh × <%= fmtRaw(tariff.electricity_price) %>
           </div>
         </div>
 
@@ -69,11 +66,8 @@
             <span class="text-slate-600 font-medium">Tiền nước</span>
             <span class="font-medium"><%= fmt(subtotal_water) %></span>
           </div>
-          <div class="text-xs text-slate-500 text-right">
-            <%= water_usage %> m³ × <%= fmtRaw(tariff.water_price) %>
-          </div>
-          <div class="text-xs text-slate-400 text-right">
-            (Số cũ: <%= Number(meter.water_start) %>, Số mới: <%= Number(meter.water_end) %>)
+          <div class="text-xs text-slate-500 text-right font-medium">
+            (<%= Number(meter.water_end) %> - <%= Number(meter.water_start) %>) = <%= water_usage %> m³ × <%= fmtRaw(tariff.water_price) %>
           </div>
         </div>
       </div>
