@@ -6,7 +6,7 @@ const { Pool } = pg;
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL && process.env.DATABASE_URL.includes('render.com')
+  ssl: process.env.DATABASE_URL && (process.env.DATABASE_URL.includes('render.com') || process.env.DATABASE_URL.includes('neon.tech'))
     ? { rejectUnauthorized: false }
     : false
 });
@@ -70,6 +70,9 @@ export async function migrate() {
       bank_name TEXT,
       bank_account TEXT
     );
+    CREATE INDEX IF NOT EXISTS idx_tenants_room_id ON tenants(room_id);
+    CREATE INDEX IF NOT EXISTS idx_tenants_ended_at ON tenants(ended_at);
+    CREATE INDEX IF NOT EXISTS idx_invoices_yyyymm ON invoices(yyyymm);
   `);
 
   await q(`INSERT INTO landlord_settings (id, owner_name, phone, address, bank_name, bank_account)

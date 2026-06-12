@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Xuất hoá đơn <%= yyyymm %></title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <script>
+    tailwind.config = { theme: { extend: { fontFamily: { sans: ['Outfit', 'sans-serif'] } } } }
+  </script>
+  <style>
+    .dotted-border { border-top: 2px dashed #cbd5e1; }
+    /* Giữ nguyên kích thước cố định cho hoá đơn để chụp ảnh không bị méo */
+    .invoice-card { width: 500px; padding: 32px; background: white; border-radius: 16px; border: 1px solid #e5e7eb; position: relative; overflow: hidden; margin-bottom: 2rem; }
+    .invoice-header-bar { position: absolute; top: 0; left: 0; width: 100%; height: 8px; background: #4f46e5; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased p-8 min-h-screen">
+  
+  <div class="max-w-4xl mx-auto">
+    <div class="mb-8 flex items-center justify-between bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900">Xuất Hoá đơn tháng <%= yyyymm.slice(4,6) %>/<%= yyyymm.slice(0,4) %></h1>
+        <p class="text-slate-500 mt-1">Hệ thống đang chuẩn bị <%= invoices.length %> hoá đơn. Vui lòng giữ nguyên trang này cho đến khi tải xong.</p>
+      </div>
+      <a href="/" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl transition-colors">Trở về</a>
+    </div>
+
+    <div id="progressContainer" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8 text-center">
+      <div id="statusText" class="text-lg font-bold text-indigo-600 mb-4">Đang chuẩn bị...</div>
+      <div class="w-full bg-slate-100 rounded-full h-4 overflow-hidden">
+        <div id="progressBar" class="bg-indigo-600 h-4 rounded-full transition-all duration-300" style="width: 0%"></div>
+      </div>
+    </div>
+
+    <!-- Container chứa các hoá đơn ẩn (chỉ dùng để render ảnh) -->
+    <div id="invoicesWrapper" class="flex flex-col items-center opacity-0 pointer-events-none" style="position: absolute; top: -9999px; left: -9999px;">
+      <% invoices.forEach((inv, idx) => { %>
+        <div class="invoice-card" id="invoice-<%= idx %>" data-name="<%= inv.room_name %>">
+          <div class="invoice-header-bar"></div>
+          <div class="flex items-start justify-between mb-6">
+            <div>
+              <h1 class="text-2xl font-bold text-slate-900">HOÁ ĐƠN PHÒNG <%= inv.room_name %></h1>
+              <div class="text-slate-500 font-medium">Kỳ thu: <%= yyyymm.slice(4,6) %>/<%= yyyymm.slice(0,4) %></div>
+            </div>
+          </div>
+
+          <% if (inv.tenant_name) { %>
+          <div class="mb-6 text-sm">
+            <div class="text-slate-500 mb-1">Người thuê:</div>
+            <div class="font-semibold text-lg text-slate-800"><%= inv.tenant_name %></div>
+          </div>
+          <% } %>
+
+          <div class="space-y-4 text-sm mb-6">
+            <div class="flex justify-between items-center">
+              <span class="text-slate-600">Tiền phòng</span>
+              <span class="font-medium"><%= fmt(inv.rent) %></span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-slate-600">Internet</span>
+              <span class="font-medium"><%= fmt(inv.internet_fee) %></span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-slate-600">Vệ sinh</span>
+              <span class="font-medium"><%= fmt(inv.cleaning_fee) %></span>
+            </div>
+            
+            <div class="pt-3 dotted-border">
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-slate-600 font-medium">Tiền điện</span>
+                <span class="font-medium"><%= fmt(inv.subtotal_electricity) %></span>
+              </div>
+              <div class="text-xs text-slate-500 text-right">
+                <%= Number((inv.elec_end - inv.elec_start).toFixed(2)) %> kWh × <%= fmtRaw(inv.electricity_price) %>
+              </div>
+            </div>
+
+            <div class="pt-3 dotted-border">
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-slate-600 font-medium">Tiền nước</span>
+                <span class="font-medium"><%= fmt(inv.subtotal_water) %></span>
+              </div>
+              <div class="text-xs text-slate-500 text-right">
+                <%= Number((inv.water_end - inv.water_start).toFixed(2)) %> m³ × <%= fmtRaw(inv.water_price) %>
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-4 mt-2 dotted-border flex items-center justify-between">
+            <span class="text-lg font-bold text-slate-900">TỔNG CỘNG</span>
+            <span class="text-2xl font-bold text-indigo-600"><%= fmt(inv.total) %></span>
+          </div>
+
+          <% if (settings && settings.bank_name && settings.bank_account) { %>
+          <div class="mt-6 bg-slate-50 p-6 border border-slate-100 rounded-xl flex flex-col items-center">
+            <div class="text-sm text-slate-600 mb-3 text-center">Quét mã QR để thanh toán</div>
+            <% 
+              const bank = settings.bank_name.trim().toLowerCase().replace(/\s+/g, '');
+              const acc = settings.bank_account.trim();
+              const qrUrl = `https://img.vietqr.io/image/${bank}-${acc}-compact2.jpg?amount=${inv.total}&addInfo=Phong ${inv.room_name} Thang ${yyyymm}&accountName=${encodeURIComponent(settings.owner_name || '')}`;
+            %>
+            <img src="<%= qrUrl %>" alt="QR Code" class="w-40 h-40 rounded-xl shadow-sm border border-slate-200">
+            <div class="text-xs text-slate-500 mt-4 text-center space-y-1">
+              <div>NH: <b><%= settings.bank_name %></b> - STK: <b><%= settings.bank_account %></b></div>
+              <div>Chủ TK: <b><%= settings.owner_name %></b></div>
+            </div>
+          </div>
+          <% } %>
+          
+          <div class="mt-4 text-center text-xs text-slate-400">
+            Ngày tạo: <%= new Date(inv.created_at).toLocaleString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'}) %>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", async () => {
+      const invoicesCount = <%= invoices.length %>;
+      if (invoicesCount === 0) {
+        document.getElementById('statusText').innerText = "Không có hoá đơn nào trong tháng này!";
+        document.getElementById('statusText').className = "text-lg font-bold text-red-600 mb-4";
+        return;
+      }
+
+      const zip = new JSZip();
+      const folder = zip.folder("HoaDon_" + "<%= yyyymm %>");
+      
+      for (let i = 0; i < invoicesCount; i++) {
+        const el = document.getElementById('invoice-' + i);
+        const roomName = el.getAttribute('data-name');
+        
+        document.getElementById('statusText').innerText = `Đang tạo ảnh phòng ${roomName} (${i+1}/${invoicesCount})...`;
+        document.getElementById('progressBar').style.width = `${((i) / invoicesCount) * 100}%`;
+
+        // Dùng html2canvas chụp ảnh thẻ div
+        const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', logging: false });
+        
+        // Chuyển canvas thành blob ảnh
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        
+        // Thêm vào file zip
+        folder.file(`HoaDon_${roomName}.png`, blob);
+      }
+
+      document.getElementById('statusText').innerText = `Đang nén file ZIP...`;
+      document.getElementById('progressBar').style.width = `95%`;
+
+      // Tạo file zip và tải xuống
+      const content = await zip.generateAsync({ type: "blob" });
+      saveAs(content, `HoaDon_Thang_<%= yyyymm %>.zip`);
+
+      document.getElementById('statusText').innerText = `✅ Đã tải xuống thành công!`;
+      document.getElementById('statusText').className = "text-lg font-bold text-emerald-600 mb-4";
+      document.getElementById('progressBar').style.width = `100%`;
+      document.getElementById('progressBar').className = "bg-emerald-600 h-4 rounded-full transition-all duration-300";
+    });
+  </script>
+</body>
+</html>

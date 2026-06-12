@@ -39,8 +39,12 @@ function prevMonthStr(yyyymm) {
 }
 
 async function recalcInvoice(roomId, yyyymm) {
-  const tariff = (await q(`SELECT * FROM tariffs WHERE room_id=$1`, [roomId])).rows[0];
-  const meter  = (await q(`SELECT * FROM meter_readings WHERE room_id=$1 AND yyyymm=$2`, [roomId, yyyymm])).rows[0];
+  const [tariffRes, meterRes] = await Promise.all([
+    q(`SELECT * FROM tariffs WHERE room_id=$1`, [roomId]),
+    q(`SELECT * FROM meter_readings WHERE room_id=$1 AND yyyymm=$2`, [roomId, yyyymm])
+  ]);
+  const tariff = tariffRes.rows[0];
+  const meter  = meterRes.rows[0];
   if (!tariff || !meter) return null; // chưa đủ dữ liệu
 
   const elec_usage = Number((meter.elec_end - meter.elec_start).toFixed(2));
@@ -69,10 +73,14 @@ async function recalcInvoice(roomId, yyyymm) {
 // routes
 app.get('/', async (req, res) => {
   const { rows } = await q(`
-    SELECT r.*, (SELECT full_name FROM tenants t
+    SELECT r.*, t.full_name AS tenant
+    FROM rooms r
+    LEFT JOIN LATERAL (
+      SELECT full_name FROM tenants t
       WHERE t.room_id = r.id AND t.ended_at IS NULL
-      ORDER BY started_at DESC LIMIT 1) AS tenant
-    FROM rooms r ORDER BY r.id
+      ORDER BY started_at DESC LIMIT 1
+    ) t ON true
+    ORDER BY r.id
   `);
   res.render('index', { rooms: rows });
 });
@@ -140,22 +148,35 @@ app.put('/rooms/:id', async (req, res) => {
 // room detail with month selection
 app.get('/rooms/:id', async (req, res) => {
   const id = Number(req.params.id);
-  const room = (await q(`SELECT * FROM rooms WHERE id=$1`, [id])).rows[0];
+  const yyyymm = (req.query.yyyymm && /^[0-9]{6}$/.test(req.query.yyyymm)) ? req.query.yyyymm : dayjs().format('YYYYMM');
+  const prevYm = prevMonthStr(yyyymm);
+
+  const [roomRes, tenantRes, tariffRes, meterRes, prevMeterRes, invoicesRes] = await Promise.all([
+    q(`SELECT * FROM rooms WHERE id=$1`, [id]),
+    q(`SELECT * FROM tenants WHERE room_id=$1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`, [id]),
+    q(`SELECT * FROM tariffs WHERE room_id=$1`, [id]),
+    q(`SELECT * FROM meter_readings WHERE room_id=$1 AND yyyymm=$2`, [id, yyyymm]),
+    q(`SELECT * FROM meter_readings WHERE room_id=$1 AND yyyymm=$2`, [id, prevYm]),
+    q(`SELECT * FROM invoices WHERE room_id=$1 ORDER BY yyyymm DESC`, [id])
+  ]);
+
+  const room = roomRes.rows[0];
   if (!room) return res.status(404).send('Not found');
 
-  const tenant = await activeTenant(id);
-  const tariff  = await roomTariff(id);
-  const yyyymm = (req.query.yyyymm && /^[0-9]{6}$/.test(req.query.yyyymm)) ? req.query.yyyymm : dayjs().format('YYYYMM');
-  const meter = (await q(`SELECT * FROM meter_readings WHERE room_id=$1 AND yyyymm=$2`, [id, yyyymm])).rows[0] || null;
+  const tenant = tenantRes.rows[0] || null;
+  const tariff = tariffRes.rows[0] || null;
+  const meter = meterRes.rows[0] || null;
+  const invoices = invoicesRes.rows;
 
   let prefill = null, prevYyyymm = null;
   if (!meter) {
-    prevYyyymm = prevMonthStr(yyyymm);
-    const prev = (await q(`SELECT * FROM meter_readings WHERE room_id=$1 AND yyyymm=$2`, [id, prevYyyymm])).rows[0] || null;
-    if (prev) prefill = { elec_start: prev.elec_end, water_start: prev.water_end };
+    const prev = prevMeterRes.rows[0] || null;
+    if (prev) {
+      prevYyyymm = prevYm;
+      prefill = { elec_start: prev.elec_end, water_start: prev.water_end };
+    }
   }
 
-  const invoices = (await q(`SELECT * FROM invoices WHERE room_id=$1 ORDER BY yyyymm DESC`, [id])).rows;
   const hasCompleteMeter = !!(meter && Number(meter.elec_end) >= Number(meter.elec_start) && Number(meter.water_end) >= Number(meter.water_start));
 
   res.render('room', { room, tenant, tariff, yyyymm, meter, invoices, prefill, prevYyyymm, hasCompleteMeter });
@@ -221,15 +242,19 @@ app.get('/rooms/:id/invoice/:yyyymm', async (req, res) => {
   const id = Number(req.params.id);
   const { yyyymm } = req.params;
 
-  const room   = (await q(`SELECT * FROM rooms WHERE id=$1`, [id])).rows[0];
-  const tenant = (await activeTenant(id));
-  if (!room) return res.status(404).send('Không tìm thấy phòng');
+  const [roomRes, tenantRes, meterRes, settingsRes] = await Promise.all([
+    q(`SELECT * FROM rooms WHERE id=$1`, [id]),
+    q(`SELECT * FROM tenants WHERE room_id=$1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`, [id]),
+    q(`SELECT * FROM meter_readings WHERE room_id=$1 AND yyyymm=$2`, [id, yyyymm]),
+    q(`SELECT * FROM landlord_settings WHERE id=1`)
+  ]);
 
-  // Lấy chỉ số công tơ của tháng này
-  const meter = (await q(
-    `SELECT * FROM meter_readings WHERE room_id=$1 AND yyyymm=$2`,
-    [id, yyyymm]
-  )).rows[0];
+  const room = roomRes.rows[0];
+  const tenant = tenantRes.rows[0] || null;
+  const meter = meterRes.rows[0] || null;
+  const settings = settingsRes.rows[0] || {};
+  
+  if (!room) return res.status(404).send('Không tìm thấy phòng');
 
   // Tự tính (và upsert) hóa đơn mỗi lần mở
   const recalc = await recalcInvoice(id, yyyymm);
@@ -244,7 +269,41 @@ app.get('/rooms/:id/invoice/:yyyymm', async (req, res) => {
     subtotal_water: invoice.subtotal_water,
     rent: invoice.rent, internet_fee: invoice.internet_fee, cleaning_fee: invoice.cleaning_fee,
     total: invoice.total, createdAt: invoice.created_at,
-    tariff,
+    tariff, settings,
+    fmt: (n)=> new Intl.NumberFormat('vi-VN').format(n) + ' đ',
+    fmtRaw: (n)=> new Intl.NumberFormat('vi-VN').format(n) + ' đ'
+  });
+});
+
+// export all invoices to zip client side
+app.get('/export/:yyyymm', async (req, res) => {
+  const { yyyymm } = req.params;
+  const { rows } = await q(`
+    SELECT r.id as room_id, r.name as room_name,
+           i.subtotal_electricity, i.subtotal_water, i.rent, i.internet_fee, i.cleaning_fee, i.total, i.created_at,
+           m.elec_start, m.elec_end, m.water_start, m.water_end,
+           t.full_name as tenant_name,
+           tf.electricity_price, tf.water_price
+    FROM invoices i
+    JOIN rooms r ON i.room_id = r.id
+    JOIN meter_readings m ON m.room_id = r.id AND m.yyyymm = i.yyyymm
+    JOIN tariffs tf ON tf.room_id = r.id
+    LEFT JOIN LATERAL (
+      SELECT full_name FROM tenants 
+      WHERE room_id = r.id AND started_at <= i.created_at AND (ended_at IS NULL OR ended_at >= i.created_at)
+      ORDER BY started_at DESC LIMIT 1
+    ) t ON true
+    WHERE i.yyyymm = $1
+    ORDER BY r.id
+  `, [yyyymm]);
+
+  const settingsRes = await q(`SELECT * FROM landlord_settings WHERE id=1`);
+  const settings = settingsRes.rows[0] || {};
+  
+  res.render('export', {
+    yyyymm,
+    invoices: rows,
+    settings,
     fmt: (n)=> new Intl.NumberFormat('vi-VN').format(n) + ' đ',
     fmtRaw: (n)=> new Intl.NumberFormat('vi-VN').format(n) + ' đ'
   });

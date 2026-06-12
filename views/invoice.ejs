@@ -5,43 +5,112 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Hóa đơn <%= yyyymm %> - <%= room.name %></title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>@media print {.no-print{display:none}} .cell{padding:6px 10px;border-bottom:1px solid #e5e7eb}</style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = { theme: { extend: { fontFamily: { sans: ['Outfit', 'sans-serif'] } } } }
+  </script>
+  <style>
+    @media print { .no-print{display:none} body{background:white;} .shadow-xl{box-shadow:none; border:1px solid #e5e7eb;} }
+    .dotted-border { border-top: 2px dashed #cbd5e1; }
+  </style>
 </head>
-<body class="bg-white text-slate-900">
-  <div class="max-w-2xl mx-auto p-6">
-    <div class="flex items-center justify-between mb-2">
-      <h1 class="text-xl font-semibold">HÓA ĐƠN PHÒNG <%= room.name %> — <%= yyyymm %></h1>
-      <button class="no-print px-3 py-2 bg-slate-900 text-white rounded-lg" onclick="print()">In hoá đơn</button>
-    </div>
-    <%
-      const createdAtVN = new Date().toLocaleString('vi-VN', {
-      timeZone: 'Asia/Ho_Chi_Minh',
-      dateStyle: 'full',
-      timeStyle: 'medium'
-      });
-    %>
-    <div class="text-sm text-slate-600 mb-4">Ngày tạo: <%= createdAtVN %></div>
+<body class="bg-slate-100 text-slate-800 antialiased p-4 sm:p-8">
+  <div class="max-w-md mx-auto bg-white rounded-2xl shadow-xl overflow-hidden relative">
+    <div class="absolute top-0 left-0 w-full h-2 bg-indigo-600"></div>
+    
+    <div class="p-8">
+      <div class="flex items-start justify-between mb-6">
+        <div>
+          <h1 class="text-2xl font-bold text-slate-900">HOÁ ĐƠN PHÒNG <%= room.name %></h1>
+          <div class="text-slate-500 font-medium">Kỳ thu: <%= yyyymm.slice(4,6) %>/<%= yyyymm.slice(0,4) %></div>
+        </div>
+        <button class="no-print p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors" onclick="window.print()" title="In hoá đơn">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+        </button>
+      </div>
 
-    <div class="border rounded-xl overflow-hidden">
-      <div class="grid grid-cols-2">
-        <div class="cell">Tiền phòng</div><div class="cell text-right"><%= fmt(rent) %></div>
-        <div class="cell">Mạng</div><div class="cell text-right"><%= fmt(internet_fee) %></div>
-        <div class="cell">Vệ sinh</div><div class="cell text-right"><%= fmt(cleaning_fee) %></div>
-        <div class="cell">
-        Điện (<%= Number(meter.elec_end) %> − <%= Number(meter.elec_start) %>)
-        <%= elec_usage %> kWh × <%= fmtRaw(tariff.electricity_price) %>
+      <% if (tenant) { %>
+      <div class="mb-6 text-sm">
+        <div class="text-slate-500 mb-1">Người thuê:</div>
+        <div class="font-semibold text-lg text-slate-800"><%= tenant.full_name %></div>
+      </div>
+      <% } %>
+
+      <div class="space-y-4 text-sm mb-6">
+        <div class="flex justify-between items-center">
+          <span class="text-slate-600">Tiền phòng</span>
+          <span class="font-medium"><%= fmt(rent) %></span>
         </div>
-        <div class="cell text-right"><%= fmt(subtotal_electricity) %></div>
-        <div class="cell">
-        Nước (<%= Number(meter.water_end) %> − <%= Number(meter.water_start) %>)
-        <%= water_usage %> m³ × <%= fmtRaw(tariff.water_price) %>
+        <div class="flex justify-between items-center">
+          <span class="text-slate-600">Internet</span>
+          <span class="font-medium"><%= fmt(internet_fee) %></span>
         </div>
-        <div class="cell text-right"><%= fmt(subtotal_water) %></div>
-        <div class="cell font-medium">TỔNG</div><div class="cell text-right font-semibold"><%= fmt(total) %></div>
+        <div class="flex justify-between items-center">
+          <span class="text-slate-600">Vệ sinh</span>
+          <span class="font-medium"><%= fmt(cleaning_fee) %></span>
+        </div>
+        
+        <div class="pt-3 dotted-border">
+          <div class="flex justify-between items-center mb-1">
+            <span class="text-slate-600 font-medium">Tiền điện</span>
+            <span class="font-medium"><%= fmt(subtotal_electricity) %></span>
+          </div>
+          <div class="text-xs text-slate-500 text-right">
+            <%= elec_usage %> kWh × <%= fmtRaw(tariff.electricity_price) %>
+          </div>
+          <div class="text-xs text-slate-400 text-right">
+            (Số cũ: <%= Number(meter.elec_start) %>, Số mới: <%= Number(meter.elec_end) %>)
+          </div>
+        </div>
+
+        <div class="pt-3 dotted-border">
+          <div class="flex justify-between items-center mb-1">
+            <span class="text-slate-600 font-medium">Tiền nước</span>
+            <span class="font-medium"><%= fmt(subtotal_water) %></span>
+          </div>
+          <div class="text-xs text-slate-500 text-right">
+            <%= water_usage %> m³ × <%= fmtRaw(tariff.water_price) %>
+          </div>
+          <div class="text-xs text-slate-400 text-right">
+            (Số cũ: <%= Number(meter.water_start) %>, Số mới: <%= Number(meter.water_end) %>)
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-4 mt-2 dotted-border flex items-center justify-between">
+        <span class="text-lg font-bold text-slate-900">TỔNG CỘNG</span>
+        <span class="text-2xl font-bold text-indigo-600"><%= fmt(total) %></span>
       </div>
     </div>
 
-
+    <% if (settings && settings.bank_name && settings.bank_account) { %>
+    <div class="bg-slate-50 p-6 border-t border-slate-100 flex flex-col items-center">
+      <div class="text-sm text-slate-600 mb-3 text-center">Quét mã QR để thanh toán</div>
+      <% 
+        // Normalize bank name for VietQR (e.g. MBBank -> mbbank)
+        const bank = settings.bank_name.trim().toLowerCase().replace(/\s+/g, '');
+        const acc = settings.bank_account.trim();
+        const qrUrl = `https://img.vietqr.io/image/${bank}-${acc}-compact2.jpg?amount=${total}&addInfo=Phong ${room.name} Thang ${yyyymm}&accountName=${encodeURIComponent(settings.owner_name || '')}`;
+      %>
+      <img src="<%= qrUrl %>" alt="QR Code" class="w-48 h-48 rounded-xl shadow-sm border border-slate-200" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <div class="text-xs text-slate-400 mt-3 text-center" style="display:none;">(Vui lòng kiểm tra lại Tên/Mã ngân hàng trong phần Cài đặt)</div>
+      
+      <div class="text-xs text-slate-500 mt-4 text-center space-y-1">
+        <div>Ngân hàng: <b><%= settings.bank_name %></b></div>
+        <div>STK: <b><%= settings.bank_account %></b></div>
+        <div>Chủ TK: <b><%= settings.owner_name %></b></div>
+      </div>
+    </div>
+    <% } else { %>
+    <div class="bg-amber-50 p-4 border-t border-amber-100 text-center">
+      <div class="text-sm text-amber-700">Chưa thiết lập tài khoản ngân hàng. Vui lòng vào Cài đặt chủ trọ để bật mã QR thanh toán.</div>
+    </div>
+    <% } %>
+    
+    <div class="bg-white p-4 text-center text-xs text-slate-400">
+      Ngày tạo: <%= new Date(createdAt).toLocaleString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'}) %>
+    </div>
   </div>
 </body>
 </html>
