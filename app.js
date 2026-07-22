@@ -55,6 +55,14 @@ function parseTariffFields(body) {
     if (n === null) return { error: `Giá trị "${f}" không hợp lệ` };
     values[f] = n;
   }
+  // Số tháng thu: số nguyên >= 1, mặc định 1
+  let months = 1;
+  if (body.months !== undefined && body.months !== '') {
+    const m = Number(body.months);
+    if (!Number.isInteger(m) || m < 1) return { error: 'Số tháng phải là số nguyên >= 1' };
+    months = m;
+  }
+  values.months = months;
   return { values };
 }
 
@@ -78,20 +86,25 @@ async function recalcInvoice(roomId, yyyymm) {
   const water_usage = Number((meter.water_end - meter.water_start).toFixed(2));
   const subtotal_electricity = Math.round(elec_usage * tariff.electricity_price);
   const subtotal_water       = Math.round(water_usage * tariff.water_price);
-  const total = tariff.rent + tariff.internet_fee + tariff.cleaning_fee + subtotal_electricity + subtotal_water;
+  // Phí cố định (phòng + mạng + vệ sinh) nhân theo số tháng thu; điện/nước
+  // giữ theo chỉ số thực tế của tháng.
+  const months = Math.max(1, Number(tariff.months) || 1);
+  const fixed_monthly = tariff.rent + tariff.internet_fee + tariff.cleaning_fee;
+  const total = fixed_monthly * months + subtotal_electricity + subtotal_water;
 
   const { rows } = await q(`
-    INSERT INTO invoices (room_id, yyyymm, subtotal_electricity, subtotal_water, rent, internet_fee, cleaning_fee, total)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+    INSERT INTO invoices (room_id, yyyymm, subtotal_electricity, subtotal_water, rent, internet_fee, cleaning_fee, months, total)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
     ON CONFLICT (room_id, yyyymm) DO UPDATE SET
       subtotal_electricity = EXCLUDED.subtotal_electricity,
       subtotal_water       = EXCLUDED.subtotal_water,
       rent                 = EXCLUDED.rent,
       internet_fee         = EXCLUDED.internet_fee,
       cleaning_fee         = EXCLUDED.cleaning_fee,
+      months               = EXCLUDED.months,
       total                = EXCLUDED.total
     RETURNING *;
-  `, [roomId, yyyymm, subtotal_electricity, subtotal_water, tariff.rent, tariff.internet_fee, tariff.cleaning_fee, total]);
+  `, [roomId, yyyymm, subtotal_electricity, subtotal_water, tariff.rent, tariff.internet_fee, tariff.cleaning_fee, months, total]);
 
   return { invoice: rows[0], elec_usage, water_usage, tariff };
 }
@@ -138,12 +151,12 @@ app.post('/rooms', async (req, res) => {
   if (!name || name.trim() === '') return res.status(400).send('Tên phòng là bắt buộc');
   const parsed = parseTariffFields(req.body);
   if (parsed.error) return res.status(400).send(parsed.error);
-  const { rent, internet_fee, cleaning_fee, electricity_price, water_price } = parsed.values;
+  const { rent, internet_fee, cleaning_fee, electricity_price, water_price, months } = parsed.values;
   const { rows } = await q(`INSERT INTO rooms (name, note) VALUES ($1,$2) RETURNING id`, [name.trim(), note || null]);
   const roomId = rows[0].id;
-  await q(`INSERT INTO tariffs (room_id, rent, internet_fee, cleaning_fee, electricity_price, water_price)
-           VALUES ($1,$2,$3,$4,$5,$6)`,
-           [roomId, rent, internet_fee, cleaning_fee, electricity_price, water_price]);
+  await q(`INSERT INTO tariffs (room_id, rent, internet_fee, cleaning_fee, electricity_price, water_price, months)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+           [roomId, rent, internet_fee, cleaning_fee, electricity_price, water_price, months]);
   if (tenant_full_name && tenant_full_name.trim() !== '') {
     await q(`INSERT INTO tenants (room_id, full_name, phone, started_at, ended_at)
              VALUES ($1,$2,$3,$4,NULL)`,
@@ -166,10 +179,10 @@ app.put('/rooms/:id', async (req, res) => {
   if (!name || name.trim() === '') return res.status(400).send('Tên phòng là bắt buộc');
   const parsed = parseTariffFields(req.body);
   if (parsed.error) return res.status(400).send(parsed.error);
-  const { rent, internet_fee, cleaning_fee, electricity_price, water_price } = parsed.values;
+  const { rent, internet_fee, cleaning_fee, electricity_price, water_price, months } = parsed.values;
   await q(`UPDATE rooms SET name=$1, note=$2 WHERE id=$3`, [name.trim(), note || null, id]);
-  await q(`UPDATE tariffs SET rent=$1, internet_fee=$2, cleaning_fee=$3, electricity_price=$4, water_price=$5 WHERE room_id=$6`,
-          [rent, internet_fee, cleaning_fee, electricity_price, water_price, id]);
+  await q(`UPDATE tariffs SET rent=$1, internet_fee=$2, cleaning_fee=$3, electricity_price=$4, water_price=$5, months=$6 WHERE room_id=$7`,
+          [rent, internet_fee, cleaning_fee, electricity_price, water_price, months, id]);
   // Tự tính lại hóa đơn nếu đang xem tháng cụ thể
   const yyyymm = req.query.yyyymm;
   if (yyyymm) {
@@ -184,13 +197,19 @@ app.get('/rooms/:id', async (req, res) => {
   const yyyymm = (req.query.yyyymm && /^[0-9]{6}$/.test(req.query.yyyymm)) ? req.query.yyyymm : dayjs().format('YYYYMM');
   const prevYm = prevMonthStr(yyyymm);
 
-  const [roomRes, tenantRes, tariffRes, meterRes, prevMeterRes, invoicesRes] = await Promise.all([
+  const [roomRes, tenantRes, tariffRes, meterRes, prevMeterRes, invoicesRes, allRoomsRes] = await Promise.all([
     q(`SELECT * FROM rooms WHERE id=$1`, [id]),
     q(`SELECT * FROM tenants WHERE room_id=$1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`, [id]),
     q(`SELECT * FROM tariffs WHERE room_id=$1`, [id]),
     q(`SELECT * FROM meter_readings WHERE room_id=$1 AND yyyymm=$2`, [id, yyyymm]),
     q(`SELECT * FROM meter_readings WHERE room_id=$1 AND yyyymm=$2`, [id, prevYm]),
-    q(`SELECT * FROM invoices WHERE room_id=$1 ORDER BY yyyymm DESC`, [id])
+    q(`SELECT * FROM invoices WHERE room_id=$1 ORDER BY yyyymm DESC`, [id]),
+    q(`SELECT r.id, r.name, (t.id IS NOT NULL) AS occupied
+       FROM rooms r
+       LEFT JOIN LATERAL (
+         SELECT id FROM tenants WHERE room_id = r.id AND ended_at IS NULL LIMIT 1
+       ) t ON true
+       ORDER BY r.id`)
   ]);
 
   const room = roomRes.rows[0];
@@ -212,7 +231,7 @@ app.get('/rooms/:id', async (req, res) => {
 
   const hasCompleteMeter = !!(meter && Number(meter.elec_end) >= Number(meter.elec_start) && Number(meter.water_end) >= Number(meter.water_start));
 
-  res.render('room', { room, tenant, tariff, yyyymm, meter, invoices, prefill, prevYyyymm, hasCompleteMeter });
+  res.render('room', { room, tenant, tariff, yyyymm, meter, invoices, prefill, prevYyyymm, hasCompleteMeter, allRooms: allRoomsRes.rows });
 });
 
 // tenant manage
@@ -309,7 +328,7 @@ app.get('/rooms/:id/invoice/:yyyymm', async (req, res) => {
     subtotal_electricity: invoice.subtotal_electricity,
     subtotal_water: invoice.subtotal_water,
     rent: invoice.rent, internet_fee: invoice.internet_fee, cleaning_fee: invoice.cleaning_fee,
-    total: invoice.total, createdAt: invoice.created_at,
+    months: invoice.months, total: invoice.total, createdAt: invoice.created_at,
     tariff, settings,
     fmt: (n)=> new Intl.NumberFormat('vi-VN').format(n) + ' đ',
     fmtRaw: (n)=> new Intl.NumberFormat('vi-VN').format(n) + ' đ'
@@ -321,7 +340,7 @@ app.get('/export/:yyyymm', async (req, res) => {
   const { yyyymm } = req.params;
   const { rows } = await q(`
     SELECT r.id as room_id, r.name as room_name,
-           i.subtotal_electricity, i.subtotal_water, i.rent, i.internet_fee, i.cleaning_fee, i.total, i.created_at,
+           i.subtotal_electricity, i.subtotal_water, i.rent, i.internet_fee, i.cleaning_fee, i.months, i.total, i.created_at,
            m.elec_start, m.elec_end, m.water_start, m.water_end,
            t.full_name as tenant_name,
            tf.electricity_price, tf.water_price

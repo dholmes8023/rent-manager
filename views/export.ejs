@@ -43,10 +43,12 @@
       <% invoices.forEach((inv, idx) => { %>
         <div class="invoice-card" id="invoice-<%= idx %>" data-name="<%= inv.room_name %>">
           <div class="invoice-header-bar"></div>
+          <% const m = Number(inv.months) || 1; %>
           <div class="flex items-start justify-between mb-6">
             <div>
               <h1 class="text-2xl font-bold text-slate-900">HOÁ ĐƠN PHÒNG <%= inv.room_name %></h1>
               <div class="text-slate-500 font-medium">Kỳ thu: <%= yyyymm.slice(4,6) %>/<%= yyyymm.slice(0,4) %></div>
+              <% if (m > 1) { %><div class="mt-1 inline-block text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">Thu <%= m %> tháng</div><% } %>
             </div>
           </div>
 
@@ -59,16 +61,16 @@
 
           <div class="space-y-4 text-sm mb-6">
             <div class="flex justify-between items-center">
-              <span class="text-slate-600">Tiền phòng</span>
-              <span class="font-medium"><%= fmt(inv.rent) %></span>
+              <span class="text-slate-600">Tiền phòng<% if (m > 1) { %> <span class="text-xs text-slate-400">(<%= fmtRaw(inv.rent) %> × <%= m %>)</span><% } %></span>
+              <span class="font-medium"><%= fmt(inv.rent * m) %></span>
             </div>
             <div class="flex justify-between items-center">
-              <span class="text-slate-600">Internet</span>
-              <span class="font-medium"><%= fmt(inv.internet_fee) %></span>
+              <span class="text-slate-600">Internet<% if (m > 1) { %> <span class="text-xs text-slate-400">(<%= fmtRaw(inv.internet_fee) %> × <%= m %>)</span><% } %></span>
+              <span class="font-medium"><%= fmt(inv.internet_fee * m) %></span>
             </div>
             <div class="flex justify-between items-center">
-              <span class="text-slate-600">Vệ sinh</span>
-              <span class="font-medium"><%= fmt(inv.cleaning_fee) %></span>
+              <span class="text-slate-600">Vệ sinh<% if (m > 1) { %> <span class="text-xs text-slate-400">(<%= fmtRaw(inv.cleaning_fee) %> × <%= m %>)</span><% } %></span>
+              <span class="font-medium"><%= fmt(inv.cleaning_fee * m) %></span>
             </div>
             
             <div class="pt-3 dotted-border">

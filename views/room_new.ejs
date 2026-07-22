@@ -24,6 +24,10 @@
   <label class="text-sm">Đơn giá nước (đ/m³)
     <input type="number" name="water_price" class="input" required value="35000" />
   </label>
+  <label class="text-sm">Số tháng thu
+    <input type="number" name="months" min="1" step="1" class="input" required value="1" />
+    <span class="block text-xs text-slate-400 mt-1">Phí cố định × số tháng. Điện/nước theo chỉ số thực tế.</span>
+  </label>
 
   <div class="md:col-span-3">
     <button class="px-4 py-2 rounded-lg bg-slate-900 text-white">Tạo phòng</button>

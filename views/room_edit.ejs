@@ -26,6 +26,10 @@
   <label class="text-sm">Đơn giá nước
     <input type="number" name="water_price" class="input" required value="<%= tariff.water_price %>" />
   </label>
+  <label class="text-sm">Số tháng thu
+    <input type="number" name="months" min="1" step="1" class="input" required value="<%= tariff.months || 1 %>" />
+    <span class="block text-xs text-slate-400 mt-1">Phí phòng + mạng + vệ sinh sẽ × số tháng này. Điện/nước giữ theo chỉ số thực tế.</span>
+  </label>
 
   <div class="md:col-span-3">
     <button class="px-4 py-2 rounded-lg bg-slate-900 text-white">Lưu</button>

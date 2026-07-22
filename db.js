@@ -75,6 +75,11 @@ export async function migrate() {
     CREATE INDEX IF NOT EXISTS idx_invoices_yyyymm ON invoices(yyyymm);
   `);
 
+  // Số tháng thu tiền cho mỗi phòng (phí cố định nhân theo số tháng này).
+  // Idempotent: an toàn khi chạy lại mỗi lần khởi động.
+  await q(`ALTER TABLE tariffs  ADD COLUMN IF NOT EXISTS months INTEGER NOT NULL DEFAULT 1;`);
+  await q(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS months INTEGER NOT NULL DEFAULT 1;`);
+
   await q(`INSERT INTO landlord_settings (id, owner_name, phone, address, bank_name, bank_account)
            VALUES (1, 'Chủ trọ', '', '', '', '') ON CONFLICT (id) DO NOTHING;`);
 
