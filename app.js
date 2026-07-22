@@ -73,6 +73,26 @@ function prevMonthStr(yyyymm) {
   return date.format('YYYYMM');
 }
 
+// Nhãn kỳ thu: 1 tháng -> "07/2026"; nhiều tháng -> "Tháng 7,8,9/2026"
+// (gộp theo năm, hỗ trợ dải tháng vắt qua năm: "Tháng 11,12/2026 - 1/2027")
+function billingPeriodLabel(yyyymm, months) {
+  const m = Math.max(1, Number(months) || 1);
+  const startY = Number(yyyymm.slice(0, 4));
+  const startM = Number(yyyymm.slice(4, 6));
+  if (m <= 1) return `${String(startM).padStart(2, '0')}/${startY}`;
+
+  const groups = [];
+  for (let i = 0; i < m; i++) {
+    const d = dayjs(`${startY}-${String(startM).padStart(2, '0')}-01`).add(i, 'month');
+    const year = d.year();
+    const month = d.month() + 1;
+    let g = groups.find(x => x.year === year);
+    if (!g) { g = { year, months: [] }; groups.push(g); }
+    g.months.push(month);
+  }
+  return 'Tháng ' + groups.map(g => `${g.months.join(',')}/${g.year}`).join(' - ');
+}
+
 async function recalcInvoice(roomId, yyyymm) {
   const [tariffRes, meterRes] = await Promise.all([
     q(`SELECT * FROM tariffs WHERE room_id=$1`, [roomId]),
@@ -328,7 +348,8 @@ app.get('/rooms/:id/invoice/:yyyymm', async (req, res) => {
     subtotal_electricity: invoice.subtotal_electricity,
     subtotal_water: invoice.subtotal_water,
     rent: invoice.rent, internet_fee: invoice.internet_fee, cleaning_fee: invoice.cleaning_fee,
-    months: invoice.months, total: invoice.total, createdAt: invoice.created_at,
+    months: invoice.months, periodLabel: billingPeriodLabel(yyyymm, invoice.months),
+    total: invoice.total, createdAt: invoice.created_at,
     tariff, settings,
     fmt: (n)=> new Intl.NumberFormat('vi-VN').format(n) + ' đ',
     fmtRaw: (n)=> new Intl.NumberFormat('vi-VN').format(n) + ' đ'
@@ -362,7 +383,7 @@ app.get('/export/:yyyymm', async (req, res) => {
   
   res.render('export', {
     yyyymm,
-    invoices: rows,
+    invoices: rows.map(r => ({ ...r, periodLabel: billingPeriodLabel(yyyymm, r.months) })),
     settings,
     fmt: (n)=> new Intl.NumberFormat('vi-VN').format(n) + ' đ',
     fmtRaw: (n)=> new Intl.NumberFormat('vi-VN').format(n) + ' đ'
