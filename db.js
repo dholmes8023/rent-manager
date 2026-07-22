@@ -79,11 +79,14 @@ export async function migrate() {
            VALUES (1, 'Chủ trọ', '', '', '', '') ON CONFLICT (id) DO NOTHING;`);
 
   // --- Embedded seed for unit prices and rooms P201..P404 ---
+  // Chỉ seed khi bảng rooms trống (lần chạy đầu). KHÔNG ghi đè dữ liệu
+  // đã có, để các chỉnh sửa qua giao diện (tiền phòng, đơn giá...) không
+  // bị revert sau mỗi lần khởi động server.
+  const { rows: countRows } = await q(`SELECT COUNT(*)::int AS n FROM rooms`);
+  if (countRows[0].n > 0) return;
+
   const UNIT_ELEC = 4500;
   const UNIT_WATER = 35000;
-
-  // Force update unit prices for all existing tariffs to new units
-  await q('UPDATE tariffs SET electricity_price = $1, water_price = $2', [UNIT_ELEC, UNIT_WATER]);
 
   const rooms = [
     ['P201', 3500000, 20000, 100000, '1 người'],

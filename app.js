@@ -18,6 +18,16 @@ app.use('/public', express.static(path.join(__dirname, 'public')));
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
+// Tự bọc các async route handler để promise bị reject được chuyển tới
+// error middleware thay vì gây unhandled rejection / treo request.
+for (const method of ['get', 'post', 'put', 'delete']) {
+  const original = app[method].bind(app);
+  app[method] = (routePath, ...handlers) =>
+    original(routePath, ...handlers.map(handler =>
+      (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
+    ));
+}
+
 // helpers
 async function activeTenant(roomId) {
   const { rows } = await q(`
@@ -31,6 +41,23 @@ async function roomTariff(roomId) {
   const { rows } = await q(`SELECT * FROM tariffs WHERE room_id = $1`, [roomId]);
   return rows[0] || null;
 }
+// Chuyển sang số không âm; trả null nếu không hợp lệ
+function toNonNegNumber(v) {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+// Validate các trường giá của phòng; trả { values } hoặc { error }
+function parseTariffFields(body) {
+  const fields = ['rent', 'internet_fee', 'cleaning_fee', 'electricity_price', 'water_price'];
+  const values = {};
+  for (const f of fields) {
+    const n = toNonNegNumber(body[f]);
+    if (n === null) return { error: `Giá trị "${f}" không hợp lệ` };
+    values[f] = n;
+  }
+  return { values };
+}
+
 function prevMonthStr(yyyymm) {
   const y = Number(yyyymm.slice(0,4));
   const m = Number(yyyymm.slice(4,6));
@@ -62,8 +89,7 @@ async function recalcInvoice(roomId, yyyymm) {
       rent                 = EXCLUDED.rent,
       internet_fee         = EXCLUDED.internet_fee,
       cleaning_fee         = EXCLUDED.cleaning_fee,
-      total                = EXCLUDED.total,
-      created_at           = NOW()
+      total                = EXCLUDED.total
     RETURNING *;
   `, [roomId, yyyymm, subtotal_electricity, subtotal_water, tariff.rent, tariff.internet_fee, tariff.cleaning_fee, total]);
 
@@ -108,13 +134,16 @@ app.post('/settings', async (req, res) => {
 // create room
 app.get('/rooms/new', (req, res) => res.render('room_new'));
 app.post('/rooms', async (req, res) => {
-  const { name, note, rent, internet_fee, cleaning_fee, electricity_price, water_price,
-          tenant_full_name, tenant_phone, tenant_started_at } = req.body;
-  const { rows } = await q(`INSERT INTO rooms (name, note) VALUES ($1,$2) RETURNING id`, [name, note || null]);
+  const { name, note, tenant_full_name, tenant_phone, tenant_started_at } = req.body;
+  if (!name || name.trim() === '') return res.status(400).send('Tên phòng là bắt buộc');
+  const parsed = parseTariffFields(req.body);
+  if (parsed.error) return res.status(400).send(parsed.error);
+  const { rent, internet_fee, cleaning_fee, electricity_price, water_price } = parsed.values;
+  const { rows } = await q(`INSERT INTO rooms (name, note) VALUES ($1,$2) RETURNING id`, [name.trim(), note || null]);
   const roomId = rows[0].id;
   await q(`INSERT INTO tariffs (room_id, rent, internet_fee, cleaning_fee, electricity_price, water_price)
            VALUES ($1,$2,$3,$4,$5,$6)`,
-           [roomId, Number(rent), Number(internet_fee), Number(cleaning_fee), Number(electricity_price), Number(water_price)]);
+           [roomId, rent, internet_fee, cleaning_fee, electricity_price, water_price]);
   if (tenant_full_name && tenant_full_name.trim() !== '') {
     await q(`INSERT INTO tenants (room_id, full_name, phone, started_at, ended_at)
              VALUES ($1,$2,$3,$4,NULL)`,
@@ -133,10 +162,14 @@ app.get('/rooms/:id/edit', async (req, res) => {
 });
 app.put('/rooms/:id', async (req, res) => {
   const id = Number(req.params.id);
-  const { name, note, rent, internet_fee, cleaning_fee, electricity_price, water_price } = req.body;
-  await q(`UPDATE rooms SET name=$1, note=$2 WHERE id=$3`, [name, note || null, id]);
+  const { name, note } = req.body;
+  if (!name || name.trim() === '') return res.status(400).send('Tên phòng là bắt buộc');
+  const parsed = parseTariffFields(req.body);
+  if (parsed.error) return res.status(400).send(parsed.error);
+  const { rent, internet_fee, cleaning_fee, electricity_price, water_price } = parsed.values;
+  await q(`UPDATE rooms SET name=$1, note=$2 WHERE id=$3`, [name.trim(), note || null, id]);
   await q(`UPDATE tariffs SET rent=$1, internet_fee=$2, cleaning_fee=$3, electricity_price=$4, water_price=$5 WHERE room_id=$6`,
-          [Number(rent), Number(internet_fee), Number(cleaning_fee), Number(electricity_price), Number(water_price), id]);
+          [rent, internet_fee, cleaning_fee, electricity_price, water_price, id]);
   // Tự tính lại hóa đơn nếu đang xem tháng cụ thể
   const yyyymm = req.query.yyyymm;
   if (yyyymm) {
@@ -186,6 +219,7 @@ app.get('/rooms/:id', async (req, res) => {
 app.post('/rooms/:id/tenant', async (req, res) => {
   const id = Number(req.params.id);
   const { full_name, phone, started_at } = req.body;
+  if (!full_name || full_name.trim() === '') return res.status(400).send('Họ tên người thuê là bắt buộc');
   const current = await activeTenant(id);
   if (current) await q(`UPDATE tenants SET ended_at=$1 WHERE id=$2`, [dayjs().format('YYYY-MM-DD'), current.id]);
   await q(`INSERT INTO tenants (room_id, full_name, phone, started_at, ended_at)
@@ -218,6 +252,13 @@ app.post('/rooms/:id/meter', async (req, res) => {
     }
   }
 
+  if (!/^[0-9]{6}$/.test(yyyymm || '')) {
+    return res.status(400).send('Tháng (yyyymm) không hợp lệ');
+  }
+  const nums = [elec_start, elec_end, water_start, water_end].map(Number);
+  if (nums.some(n => !Number.isFinite(n) || n < 0)) {
+    return res.status(400).send('Chỉ số điện/nước không hợp lệ');
+  }
   if (Number(elec_end) < Number(elec_start) || Number(water_end) < Number(water_start)) {
     return res.status(400).send('Chỉ số cuối phải >= chỉ số đầu');
   }
@@ -377,6 +418,13 @@ app.post('/meters', async (req, res) => {
   }));
   
   res.redirect(`/meters?yyyymm=${yyyymm}`);
+});
+
+// Error middleware — đặt sau tất cả routes
+app.use((err, req, res, next) => {
+  console.error('Request error:', err);
+  if (res.headersSent) return next(err);
+  res.status(500).send('Đã xảy ra lỗi máy chủ. Vui lòng thử lại.');
 });
 
 const PORT = process.env.PORT || 3000;
