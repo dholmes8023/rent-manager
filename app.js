@@ -56,14 +56,16 @@ function parseTariffFields(body) {
     values[f] = n;
   }
   // Số tháng thu: số nguyên >= 1, mặc định 1
-  let months = 1;
-  if (body.months !== undefined && body.months !== '') {
-    const m = Number(body.months);
-    if (!Number.isInteger(m) || m < 1) return { error: 'Số tháng phải là số nguyên >= 1' };
-    months = m;
-  }
+  const months = parseMonths(body.months);
+  if (months === null) return { error: 'Số tháng phải là số nguyên >= 1' };
   values.months = months;
   return { values };
+}
+
+function parseMonths(value) {
+  if (value === undefined || value === '') return 1;
+  const months = Number(value);
+  return Number.isInteger(months) && months >= 1 ? months : null;
 }
 
 function prevMonthStr(yyyymm) {
@@ -209,6 +211,24 @@ app.put('/rooms/:id', async (req, res) => {
     await recalcInvoice(id, yyyymm);
   }
   res.redirect(`/rooms/${id}`);
+});
+
+// Cập nhật nhanh số tháng thu ngay trên trang thông tin phòng
+app.post('/rooms/:id/months', async (req, res) => {
+  const id = Number(req.params.id);
+  const months = parseMonths(req.body.months);
+  if (!Number.isInteger(id) || months === null) {
+    return res.status(400).send('Số tháng phải là số nguyên >= 1');
+  }
+
+  const result = await q(`UPDATE tariffs SET months=$1 WHERE room_id=$2`, [months, id]);
+  if (result.rowCount === 0) return res.status(404).send('Không tìm thấy thông tin giá phòng');
+
+  const yyyymm = req.query.yyyymm;
+  if (yyyymm && /^[0-9]{6}$/.test(yyyymm)) {
+    await recalcInvoice(id, yyyymm);
+  }
+  res.redirect(`/rooms/${id}${yyyymm && /^[0-9]{6}$/.test(yyyymm) ? `?yyyymm=${yyyymm}` : ''}`);
 });
 
 // room detail with month selection

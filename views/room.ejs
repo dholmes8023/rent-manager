@@ -64,9 +64,17 @@
           <span class="text-slate-500">Vệ sinh / tháng</span>
           <span class="font-bold text-slate-900 num"><%= tariff.cleaning_fee %></span>
         </div>
-        <div class="flex justify-between items-center py-2 border-b border-slate-100">
-          <span class="text-slate-500">Số tháng thu</span>
-          <span class="font-bold <%= (tariff.months || 1) > 1 ? 'text-indigo-600' : 'text-slate-900' %>"><%= tariff.months || 1 %> tháng</span>
+        <div class="flex justify-between items-center gap-4 py-2 border-b border-slate-100">
+          <div>
+            <div class="text-slate-500">Số tháng thu</div>
+            <div class="text-xs text-slate-400 mt-0.5">Phí phòng, mạng và vệ sinh sẽ nhân theo số tháng</div>
+          </div>
+          <form method="POST" action="/rooms/<%= room.id %>/months?yyyymm=<%= yyyymm %>" class="flex items-center gap-2 shrink-0">
+            <label for="months" class="sr-only">Số tháng thu</label>
+            <input id="months" type="number" name="months" min="1" step="1" required value="<%= tariff.months || 1 %>" class="input w-20 text-center font-semibold" />
+            <span class="text-sm text-slate-500">tháng</span>
+            <button type="submit" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors">Lưu</button>
+          </form>
         </div>
         <div class="flex justify-between items-center py-2 border-b border-slate-100">
           <span class="text-slate-500">Đơn giá điện</span>
