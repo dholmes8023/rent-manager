@@ -1,3 +1,17 @@
-</main>
+    </main>
+  </div>
+</div>
+
+<script>
+(function(){
+  var sb = document.getElementById('sidebar');
+  var bd = document.getElementById('sb-backdrop');
+  var btn = document.getElementById('sb-toggle');
+  function open(){ sb.classList.remove('-translate-x-full'); bd.classList.remove('hidden'); }
+  function close(){ sb.classList.add('-translate-x-full'); bd.classList.add('hidden'); }
+  if (btn) btn.addEventListener('click', open);
+  if (bd) bd.addEventListener('click', close);
+})();
+</script>
 </body>
 </html>

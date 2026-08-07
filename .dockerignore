@@ -1,0 +1,21 @@
+# Dependencies (được cài lại bằng `npm ci` trong image)
+node_modules
+
+# Biến môi trường / bí mật — KHÔNG bao giờ nướng vào image
+.env
+.env.*
+!.env.example
+
+# Git & metadata
+.git
+.gitignore
+
+# Cấu hình công cụ dev, không cần khi chạy
+.claude
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store

@@ -1,4 +1,4 @@
-<%- include('partials/top', { title: 'Thông tin chủ trọ' }) %>
+<%- include('partials/top', { title: 'Thông tin chủ trọ', active: 'settings' }) %>
 <h1 class="text-xl font-semibold mb-4">Thông tin chủ trọ</h1>
 <form method="POST" action="/settings" class="bg-white border rounded-xl p-4 grid md:grid-cols-2 gap-4">
   <label class="text-sm">Tên chủ trọ
@@ -15,6 +15,10 @@
   </label>
   <label class="text-sm">Số tài khoản
     <input name="bank_account" value="<%= settings?.bank_account || '' %>" class="input" />
+  </label>
+  <label class="text-sm md:col-span-2">Đơn giá vệ sinh / người (đ)
+    <input type="number" name="cleaning_per_person" min="0" step="1000" class="input" value="<%= settings?.cleaning_per_person ?? 20000 %>" />
+    <span class="block text-xs text-slate-400 mt-1">Tiền vệ sinh mỗi phòng = số người × đơn giá này. Đổi giá sẽ cập nhật lại tất cả phòng (hoá đơn đã tạo giữ nguyên).</span>
   </label>
   <div class="md:col-span-2">
     <button class="px-4 py-2 rounded-lg bg-slate-900 text-white">Lưu</button>

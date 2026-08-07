@@ -48,7 +48,7 @@
           <span class="font-medium"><%= fmt(internet_fee * m) %></span>
         </div>
         <div class="flex justify-between items-center">
-          <span class="text-slate-600">Vệ sinh<% if (m > 1) { %> <span class="text-xs text-slate-400">(<%= fmtRaw(cleaning_fee) %> × <%= m %>)</span><% } %></span>
+          <span class="text-slate-600">Vệ sinh <span class="text-xs text-slate-400">(<%= people %> người<% if (m > 1) { %> × <%= m %> tháng<% } %>)</span></span>
           <span class="font-medium"><%= fmt(cleaning_fee * m) %></span>
         </div>
         

@@ -1,4 +1,4 @@
-<%- include('partials/top', { title: 'Thêm phòng mới' }) %>
+<%- include('partials/top', { title: 'Thêm phòng mới', active: 'rooms' }) %>
 <h1 class="text-xl font-semibold mb-4">Thêm phòng mới</h1>
 <form method="POST" action="/rooms" class="bg-white border rounded-xl p-4 grid md:grid-cols-3 gap-4">
   <label class="text-sm">Tên phòng
@@ -15,8 +15,9 @@
   <label class="text-sm">Mạng (đ/tháng)
     <input type="number" name="internet_fee" class="input" required value="100000" />
   </label>
-  <label class="text-sm">Vệ sinh (đ/tháng)
-    <input type="number" name="cleaning_fee" class="input" required value="40000" />
+  <label class="text-sm">Số người
+    <input type="number" name="people" min="1" step="1" class="input" required value="1" />
+    <span class="block text-xs text-slate-400 mt-1">Phí vệ sinh = số người × <%= Number(cleaningPerPerson).toLocaleString('vi-VN') %>đ (tự tính, đổi trong Cài đặt).</span>
   </label>
   <label class="text-sm">Đơn giá điện (đ/kWh)
     <input type="number" name="electricity_price" class="input" required value="4500" />
