@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import methodOverride from 'method-override';
 import dayjs from 'dayjs';
-import { q, migrate } from './db.js';
+import { q, migrate, CLEANING_PER_PERSON } from './db.js';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -47,14 +47,20 @@ function toNonNegNumber(v) {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 // Validate các trường giá của phòng; trả { values } hoặc { error }
-function parseTariffFields(body) {
-  const fields = ['rent', 'internet_fee', 'cleaning_fee', 'electricity_price', 'water_price'];
+function parseTariffFields(body, cleaningPerPerson = CLEANING_PER_PERSON) {
+  const fields = ['rent', 'internet_fee', 'electricity_price', 'water_price'];
   const values = {};
   for (const f of fields) {
     const n = toNonNegNumber(body[f]);
     if (n === null) return { error: `Giá trị "${f}" không hợp lệ` };
     values[f] = n;
   }
+  // Số người: số nguyên >= 1. Phí vệ sinh = số người × đơn giá/người
+  // (không nhập tay nữa, luôn được tính lại từ số người).
+  const people = parsePositiveInt(body.people);
+  if (people === null) return { error: 'Số người phải là số nguyên >= 1' };
+  values.people = people;
+  values.cleaning_fee = people * cleaningPerPerson;
   // Số tháng thu: số nguyên >= 1, mặc định 1
   const months = parseMonths(body.months);
   if (months === null) return { error: 'Số tháng phải là số nguyên >= 1' };
@@ -63,9 +69,21 @@ function parseTariffFields(body) {
 }
 
 function parseMonths(value) {
+  return parsePositiveInt(value);
+}
+
+// Số nguyên >= 1; '' hoặc undefined => 1; ngược lại null nếu không hợp lệ
+function parsePositiveInt(value) {
   if (value === undefined || value === '') return 1;
-  const months = Number(value);
-  return Number.isInteger(months) && months >= 1 ? months : null;
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 1 ? n : null;
+}
+
+// Đơn giá vệ sinh/người hiện hành (đọc từ Cài đặt, mặc định = hằng số)
+async function getCleaningPerPerson() {
+  const { rows } = await q(`SELECT cleaning_per_person FROM landlord_settings WHERE id=1`);
+  const v = Number(rows[0]?.cleaning_per_person);
+  return Number.isFinite(v) && v >= 0 ? v : CLEANING_PER_PERSON;
 }
 
 function prevMonthStr(yyyymm) {
@@ -114,9 +132,10 @@ async function recalcInvoice(roomId, yyyymm) {
   const fixed_monthly = tariff.rent + tariff.internet_fee + tariff.cleaning_fee;
   const total = fixed_monthly * months + subtotal_electricity + subtotal_water;
 
+  const people = Math.max(1, Number(tariff.people) || 1);
   const { rows } = await q(`
-    INSERT INTO invoices (room_id, yyyymm, subtotal_electricity, subtotal_water, rent, internet_fee, cleaning_fee, months, total)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    INSERT INTO invoices (room_id, yyyymm, subtotal_electricity, subtotal_water, rent, internet_fee, cleaning_fee, months, people, total)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
     ON CONFLICT (room_id, yyyymm) DO UPDATE SET
       subtotal_electricity = EXCLUDED.subtotal_electricity,
       subtotal_water       = EXCLUDED.subtotal_water,
@@ -124,9 +143,10 @@ async function recalcInvoice(roomId, yyyymm) {
       internet_fee         = EXCLUDED.internet_fee,
       cleaning_fee         = EXCLUDED.cleaning_fee,
       months               = EXCLUDED.months,
+      people               = EXCLUDED.people,
       total                = EXCLUDED.total
     RETURNING *;
-  `, [roomId, yyyymm, subtotal_electricity, subtotal_water, tariff.rent, tariff.internet_fee, tariff.cleaning_fee, months, total]);
+  `, [roomId, yyyymm, subtotal_electricity, subtotal_water, tariff.rent, tariff.internet_fee, tariff.cleaning_fee, months, people, total]);
 
   return { invoice: rows[0], elec_usage, water_usage, tariff };
 }
@@ -153,32 +173,39 @@ app.get('/settings', async (req, res) => {
 });
 app.post('/settings', async (req, res) => {
   const { owner_name, phone, address, bank_name, bank_account } = req.body;
+  // Đơn giá vệ sinh/người: số nguyên >= 0; không hợp lệ thì giữ mặc định.
+  let cpp = Math.round(Number(req.body.cleaning_per_person));
+  if (!Number.isFinite(cpp) || cpp < 0) cpp = CLEANING_PER_PERSON;
   await q(`
-    INSERT INTO landlord_settings (id, owner_name, phone, address, bank_name, bank_account)
-    VALUES (1, $1, $2, $3, $4, $5)
+    INSERT INTO landlord_settings (id, owner_name, phone, address, bank_name, bank_account, cleaning_per_person)
+    VALUES (1, $1, $2, $3, $4, $5, $6)
     ON CONFLICT (id) DO UPDATE SET
       owner_name = EXCLUDED.owner_name,
       phone = EXCLUDED.phone,
       address = EXCLUDED.address,
       bank_name = EXCLUDED.bank_name,
-      bank_account = EXCLUDED.bank_account
-  `, [owner_name, phone, address, bank_name, bank_account]);
+      bank_account = EXCLUDED.bank_account,
+      cleaning_per_person = EXCLUDED.cleaning_per_person
+  `, [owner_name, phone, address, bank_name, bank_account, cpp]);
+  // Đơn giá là nguồn duy nhất: cập nhật lại tiền vệ sinh hiện hành của mọi phòng
+  // theo số người (hoá đơn đã chốt trước đó giữ nguyên vì là bản snapshot).
+  await q(`UPDATE tariffs SET cleaning_fee = people * $1`, [cpp]);
   res.redirect('/settings');
 });
 
 // create room
-app.get('/rooms/new', (req, res) => res.render('room_new'));
+app.get('/rooms/new', async (req, res) => res.render('room_new', { cleaningPerPerson: await getCleaningPerPerson() }));
 app.post('/rooms', async (req, res) => {
   const { name, note, tenant_full_name, tenant_phone, tenant_started_at } = req.body;
   if (!name || name.trim() === '') return res.status(400).send('Tên phòng là bắt buộc');
-  const parsed = parseTariffFields(req.body);
+  const parsed = parseTariffFields(req.body, await getCleaningPerPerson());
   if (parsed.error) return res.status(400).send(parsed.error);
-  const { rent, internet_fee, cleaning_fee, electricity_price, water_price, months } = parsed.values;
+  const { rent, internet_fee, cleaning_fee, electricity_price, water_price, months, people } = parsed.values;
   const { rows } = await q(`INSERT INTO rooms (name, note) VALUES ($1,$2) RETURNING id`, [name.trim(), note || null]);
   const roomId = rows[0].id;
-  await q(`INSERT INTO tariffs (room_id, rent, internet_fee, cleaning_fee, electricity_price, water_price, months)
-           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-           [roomId, rent, internet_fee, cleaning_fee, electricity_price, water_price, months]);
+  await q(`INSERT INTO tariffs (room_id, rent, internet_fee, cleaning_fee, electricity_price, water_price, months, people)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+           [roomId, rent, internet_fee, cleaning_fee, electricity_price, water_price, months, people]);
   if (tenant_full_name && tenant_full_name.trim() !== '') {
     await q(`INSERT INTO tenants (room_id, full_name, phone, started_at, ended_at)
              VALUES ($1,$2,$3,$4,NULL)`,
@@ -193,18 +220,18 @@ app.get('/rooms/:id/edit', async (req, res) => {
   const room = (await q(`SELECT * FROM rooms WHERE id=$1`, [id])).rows[0];
   if (!room) return res.status(404).send('Not found');
   const tariff = (await q(`SELECT * FROM tariffs WHERE room_id=$1`, [id])).rows[0];
-  res.render('room_edit', { room, tariff });
+  res.render('room_edit', { room, tariff, cleaningPerPerson: await getCleaningPerPerson() });
 });
 app.put('/rooms/:id', async (req, res) => {
   const id = Number(req.params.id);
   const { name, note } = req.body;
   if (!name || name.trim() === '') return res.status(400).send('Tên phòng là bắt buộc');
-  const parsed = parseTariffFields(req.body);
+  const parsed = parseTariffFields(req.body, await getCleaningPerPerson());
   if (parsed.error) return res.status(400).send(parsed.error);
-  const { rent, internet_fee, cleaning_fee, electricity_price, water_price, months } = parsed.values;
+  const { rent, internet_fee, cleaning_fee, electricity_price, water_price, months, people } = parsed.values;
   await q(`UPDATE rooms SET name=$1, note=$2 WHERE id=$3`, [name.trim(), note || null, id]);
-  await q(`UPDATE tariffs SET rent=$1, internet_fee=$2, cleaning_fee=$3, electricity_price=$4, water_price=$5, months=$6 WHERE room_id=$7`,
-          [rent, internet_fee, cleaning_fee, electricity_price, water_price, months, id]);
+  await q(`UPDATE tariffs SET rent=$1, internet_fee=$2, cleaning_fee=$3, electricity_price=$4, water_price=$5, months=$6, people=$7 WHERE room_id=$8`,
+          [rent, internet_fee, cleaning_fee, electricity_price, water_price, months, people, id]);
   // Tự tính lại hóa đơn nếu đang xem tháng cụ thể
   const yyyymm = req.query.yyyymm;
   if (yyyymm) {
@@ -271,7 +298,7 @@ app.get('/rooms/:id', async (req, res) => {
 
   const hasCompleteMeter = !!(meter && Number(meter.elec_end) >= Number(meter.elec_start) && Number(meter.water_end) >= Number(meter.water_start));
 
-  res.render('room', { room, tenant, tariff, yyyymm, meter, invoices, prefill, prevYyyymm, hasCompleteMeter, allRooms: allRoomsRes.rows });
+  res.render('room', { room, tenant, tariff, yyyymm, meter, invoices, prefill, prevYyyymm, hasCompleteMeter, allRooms: allRoomsRes.rows, cleaningPerPerson: await getCleaningPerPerson() });
 });
 
 // tenant manage
@@ -368,6 +395,7 @@ app.get('/rooms/:id/invoice/:yyyymm', async (req, res) => {
     subtotal_electricity: invoice.subtotal_electricity,
     subtotal_water: invoice.subtotal_water,
     rent: invoice.rent, internet_fee: invoice.internet_fee, cleaning_fee: invoice.cleaning_fee,
+    people: invoice.people,
     months: invoice.months, periodLabel: billingPeriodLabel(yyyymm, invoice.months),
     total: invoice.total, createdAt: invoice.created_at,
     tariff, settings,
@@ -381,7 +409,7 @@ app.get('/export/:yyyymm', async (req, res) => {
   const { yyyymm } = req.params;
   const { rows } = await q(`
     SELECT r.id as room_id, r.name as room_name,
-           i.subtotal_electricity, i.subtotal_water, i.rent, i.internet_fee, i.cleaning_fee, i.months, i.total, i.created_at,
+           i.subtotal_electricity, i.subtotal_water, i.rent, i.internet_fee, i.cleaning_fee, i.months, i.people, i.total, i.created_at,
            m.elec_start, m.elec_end, m.water_start, m.water_end,
            t.full_name as tenant_name,
            tf.electricity_price, tf.water_price
@@ -419,22 +447,27 @@ app.get('/meters', async (req, res) => {
     q(`SELECT * FROM rooms ORDER BY id`),
     q(`SELECT * FROM meter_readings WHERE yyyymm=$1`, [yyyymm]),
     q(`SELECT * FROM meter_readings WHERE yyyymm=$1`, [prevYm]),
-    q(`SELECT room_id FROM tenants WHERE ended_at IS NULL`)
+    q(`SELECT room_id, full_name FROM tenants WHERE ended_at IS NULL ORDER BY started_at`)
   ]);
 
   const metersByRoom = {};
   meterRes.rows.forEach(m => metersByRoom[m.room_id] = m);
   const prevMetersByRoom = {};
   prevMeterRes.rows.forEach(m => prevMetersByRoom[m.room_id] = m);
-  
+
+  // Tên người thuê hiện tại theo phòng (để hiển thị dưới tên phòng)
+  const tenantsByRoom = {};
+  tenantsRes.rows.forEach(t => { tenantsByRoom[t.room_id] = t.full_name; });
   const occupiedRooms = new Set(tenantsRes.rows.map(t => t.room_id));
 
-  res.render('bulk_meter', { 
-    yyyymm, 
-    rooms: roomsRes.rows, 
-    metersByRoom, 
+  res.render('bulk_meter', {
+    yyyymm,
+    rooms: roomsRes.rows,
+    metersByRoom,
     prevMetersByRoom,
-    occupiedRooms
+    occupiedRooms,
+    tenantsByRoom,
+    occupiedCount: occupiedRooms.size
   });
 });
 

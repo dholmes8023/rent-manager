@@ -1,4 +1,4 @@
-<%- include('partials/top', { title: `Sửa phòng ${room.name}` }) %>
+<%- include('partials/top', { title: `Sửa phòng ${room.name}`, active: 'rooms' }) %>
 <a href="/rooms/<%= room.id %>" class="text-sm text-blue-600">&larr; Quay lại phòng</a>
 <h1 class="text-xl font-semibold mt-2 mb-4">Sửa phòng <%= room.name %></h1>
 
@@ -17,8 +17,9 @@
   <label class="text-sm">Mạng
     <input type="number" name="internet_fee" class="input" required value="<%= tariff.internet_fee %>" />
   </label>
-  <label class="text-sm">Vệ sinh
-    <input type="number" name="cleaning_fee" class="input" required value="<%= tariff.cleaning_fee %>" />
+  <label class="text-sm">Số người
+    <input type="number" name="people" min="1" step="1" class="input" required value="<%= tariff.people %>" />
+    <span class="block text-xs text-slate-400 mt-1">Phí vệ sinh = số người × <%= Number(cleaningPerPerson).toLocaleString('vi-VN') %>đ (tự tính, đổi trong Cài đặt).</span>
   </label>
   <label class="text-sm">Đơn giá điện
     <input type="number" name="electricity_price" class="input" required value="<%= tariff.electricity_price %>" />

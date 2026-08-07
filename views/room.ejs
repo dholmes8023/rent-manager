@@ -1,4 +1,4 @@
-<%- include('partials/top', { title: `Phòng ${room.name}` }) %>
+<%- include('partials/top', { title: `Phòng ${room.name}`, active: 'rooms' }) %>
 <div class="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
   <div>
     <a href="/" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-1 inline-flex items-center gap-1">
@@ -61,7 +61,7 @@
           <span class="font-bold text-slate-900 num"><%= tariff.internet_fee %></span>
         </div>
         <div class="flex justify-between items-center py-2 border-b border-slate-100">
-          <span class="text-slate-500">Vệ sinh / tháng</span>
+          <span class="text-slate-500">Vệ sinh <span class="text-xs text-slate-400">(<%= tariff.people %> người × <%= Number(cleaningPerPerson).toLocaleString('vi-VN') %>)</span></span>
           <span class="font-bold text-slate-900 num"><%= tariff.cleaning_fee %></span>
         </div>
         <div class="flex justify-between items-center gap-4 py-2 border-b border-slate-100">
